@@ -1,0 +1,136 @@
+```html
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>五子棋・雙人對弈</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f2ec;color:#26352e;font-family:system-ui,"Noto Sans TC",sans-serif}
+main{max-width:1000px;margin:auto;padding:24px}
+header,.footer{display:flex;justify-content:space-between;align-items:center}
+header{border-bottom:1px solid #d9d9cf;padding-bottom:14px;font-weight:700}
+header small{display:block;color:#77877e;font-size:10px;letter-spacing:.16em}
+h1{text-align:center;font-family:Georgia,"Noto Serif TC",serif;letter-spacing:.15em;margin:24px 0 4px}
+.intro{text-align:center;color:#78857e;font-size:13px;margin-bottom:20px}
+.game{display:grid;grid-template-columns:minmax(300px,620px) 260px;gap:26px;align-items:center;justify-content:center}
+.frame{padding:12px;border-radius:9px;background:linear-gradient(140deg,#efd292,#d8ae64);box-shadow:0 12px 30px #44331920}
+canvas{width:100%;display:block;aspect-ratio:1;touch-action:manipulation}
+.panel{display:grid;gap:12px}
+.box,.stat{border:1px solid #e1dfd5;background:#fbfaf6;border-radius:8px;padding:14px}
+.label{font-size:10px;font-weight:700;letter-spacing:.15em;color:#86928b}
+.now{display:flex;align-items:center;gap:12px;margin:12px 0}
+.stone{width:38px;height:38px;border-radius:50%;box-shadow:inset -4px -5px 7px #0002,0 2px 4px #0002}
+.black{background:radial-gradient(circle at 32% 27%,#5a625e,#171c19 72%)}
+.white{background:radial-gradient(circle at 32% 27%,#fff,#daddd6 75%);border:1px solid #c5c9c1}
+.title{font-weight:700;font-size:17px}.sub{font-size:11px;color:#849087;margin-top:3px}
+.players,.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.player{border:1px solid transparent;border-radius:6px;background:#f1f0e9;padding:9px;font-size:12px;font-weight:650}
+.player.active{background:#f5eedf;border-color:#dec58f}
+.player small{display:block;margin:4px 0 0 18px;color:#8a938d;font-size:10px}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-2px;margin-right:5px}
+.dot.black{background:#202521}.dot.white{background:#fff;border:1px solid #adb3aa}
+.stat b{display:block;font-size:22px;margin-top:3px}
+.meta{display:flex;justify-content:space-between;margin-top:8px;font-size:12px;font-weight:650}
+.buttons{display:flex;gap:8px}
+button{cursor:pointer;border:1px solid #d5d9d1;background:#fbfaf6;padding:10px 13px;border-radius:5px;color:#26352e;font-weight:650}
+button:hover{background:#eef0ea}button.primary{color:white;background:#24473b;border-color:#24473b}
+button:disabled{opacity:.42;cursor:default}
+.help{text-align:center;color:#7e8982;font-size:11px;line-height:1.8}
+.footer{max-width:906px;margin:20px auto 0;border-top:1px solid #d9d9cf;padding-top:11px;color:#909890;font-size:10px}
+@media(max-width:720px){main{padding:16px}.game{grid-template-columns:1fr;gap:12px}.frame{padding:8px}.panel{grid-template-columns:1fr 1fr}.turnbox,.buttons,.help{grid-column:1/-1}.footer{max-width:none}}
+</style>
+</head>
+<body>
+<main>
+<header>棋・對弈時光 <small>GOMOKU · TWO PLAYERS</small><span>雙人同桌 · 黑棋先行</span></header>
+<h1>五子棋</h1>
+<div class="intro">兩人一局，落子之間見真章</div>
+<section class="game">
+  <div class="frame"><canvas id="board" aria-label="15乘15五子棋棋盤"></canvas></div>
+  <aside class="panel">
+    <div class="box turnbox">
+      <div class="label">現在輪到</div>
+      <div class="now"><i id="turnStone" class="stone black"></i><div><div id="turnTitle" class="title">黑棋回合</div><div id="turnSub" class="sub">沉著落子，搶佔先機</div></div></div>
+      <div class="players">
+        <div id="p1" class="player active"><i class="dot black"></i>黑棋<small>Player 1</small></div>
+        <div id="p2" class="player"><i class="dot white"></i>白棋<small>Player 2</small></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="label">黑棋落子</div><b id="bc">0</b></div>
+      <div class="stat"><div class="label">白棋落子</div><b id="wc">0</b></div>
+    </div>
+    <div class="box"><div class="label">對局進度</div><div class="meta"><span id="count">第 0 手</span><span id="progress">準備開始</span></div></div>
+    <div class="buttons"><button id="undo" disabled>↶　悔棋</button><button id="restart" class="primary">重新開始　↻</button></div>
+    <div class="help">點擊棋盤交叉點落子<br>快捷鍵　U 悔棋　·　R 重新開始</div>
+  </aside>
+</section>
+<div class="footer"><span>15 × 15 標準棋盤</span><span>好棋，從容落下。</span></div>
+</main>
+<script>
+(()=>{
+  const N=15, canvas=document.querySelector("#board"), ctx=canvas.getContext("2d");
+  let grid,moves,turn,winner,last,pad,step,dpr;
+  function reset(){grid=Array.from({length:N},()=>Array(N).fill(0));moves=[];turn=1;winner=0;last=null;update()}
+  function resize(){
+    const w=canvas.getBoundingClientRect().width; dpr=devicePixelRatio||1;
+    canvas.width=w*dpr;canvas.height=w*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+    pad=w*.055;step=(w-2*pad)/(N-1);draw();
+  }
+  function draw(){
+    const w=canvas.clientWidth;ctx.clearRect(0,0,w,w);ctx.strokeStyle="#705425";ctx.lineWidth=1;
+    for(let i=0;i<N;i++){let p=pad+i*step;ctx.beginPath();ctx.moveTo(pad,p);ctx.lineTo(pad+step*(N-1),p);ctx.stroke();ctx.beginPath();ctx.moveTo(p,pad);ctx.lineTo(p,pad+step*(N-1));ctx.stroke()}
+    for(let r of [3,7,11])for(let c of [3,7,11]){ctx.beginPath();ctx.arc(pad+c*step,pad+r*step,3,0,7);ctx.fillStyle="#705425";ctx.fill()}
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(grid[r][c]){
+      const x=pad+c*step,y=pad+r*step;ctx.beginPath();ctx.arc(x,y,step*.43,0,7);
+      const g=ctx.createRadialGradient(x-step*.13,y-step*.16,1,x,y,step*.45);
+      if(grid[r][c]===1){g.addColorStop(0,"#626a66");g.addColorStop(.48,"#292f2c");g.addColorStop(1,"#111512")}
+      else{g.addColorStop(0,"#fff");g.addColorStop(.76,"#eceee8");g.addColorStop(1,"#c4c8c0")}
+      ctx.fillStyle=g;ctx.fill();ctx.strokeStyle=grid[r][c]===1?"#111":"#b9bdb5";ctx.stroke();
+      if(last&&last[0]===r&&last[1]===c){ctx.beginPath();ctx.arc(x,y,step*.11,0,7);ctx.fillStyle="#dfbc72";ctx.fill()}
+    }
+    if(winner&&moves.length){const m=moves[moves.length-1];ctx.beginPath();ctx.arc(pad+m.c*step,pad+m.r*step,step*.43,0,7);ctx.strokeStyle="#c89c51";ctx.lineWidth=3;ctx.stroke()}
+  }
+  function won(r,c,p){
+    for(const [dr,dc] of [[1,0],[0,1],[1,1],[1,-1]]){
+      let n=1;
+      for(const dir of [-1,1]){let y=r+dr*dir,x=c+dc*dir;while(y>=0&&y<N&&x>=0&&x<N&&grid[y][x]===p){n++;y+=dr*dir;x+=dc*dir}}
+      if(n>=5)return true;
+    }return false;
+  }
+  function update(){
+    document.querySelector("#bc").textContent=moves.filter(m=>m.p===1).length;
+    document.querySelector("#wc").textContent=moves.filter(m=>m.p===2).length;
+    document.querySelector("#count").textContent=`第 ${moves.length} 手`;
+    document.querySelector("#progress").textContent=winner?"對局結束":moves.length?"進行中":"準備開始";
+    document.querySelector("#undo").disabled=!moves.length;
+    document.querySelector("#p1").classList.toggle("active",turn===1&&!winner);
+    document.querySelector("#p2").classList.toggle("active",turn===2&&!winner);
+    document.querySelector("#turnStone").className="stone "+(winner?(winner===1?"black":"white"):(turn===1?"black":"white"));
+    document.querySelector("#turnTitle").textContent=winner?(winner===1?"黑棋獲勝！":"白棋獲勝！"):(turn===1?"黑棋回合":"白棋回合");
+    document.querySelector("#turnSub").textContent=winner?"五子連線，漂亮的一局":turn===1?"沉著落子，搶佔先機":"仔細觀察，尋找機會";
+    draw();
+  }
+  canvas.addEventListener("click",e=>{
+    if(winner)return;
+    const b=canvas.getBoundingClientRect(),x=e.clientX-b.left,y=e.clientY-b.top;
+    const c=Math.round((x-pad)/step),r=Math.round((y-pad)/step);
+    if(r<0||r>=N||c<0||c>=N||Math.hypot(x-pad-c*step,y-pad-r*step)>step*.48||grid[r][c])return;
+    grid[r][c]=turn;moves.push({r,c,p:turn});last=[r,c];
+    if(won(r,c,turn))winner=turn;else turn=3-turn;update();
+  });
+  document.querySelector("#undo").onclick=()=>{
+    if(!moves.length)return;const m=moves.pop();grid[m.r][m.c]=0;turn=m.p;winner=0;
+    last=moves.length?[moves[moves.length-1].r,moves[moves.length-1].c]:null;update();
+  };
+  document.querySelector("#restart").onclick=reset;
+  window.addEventListener("resize",resize);
+  window.addEventListener("keydown",e=>{if(e.key.toLowerCase()==="u")document.querySelector("#undo").click();if(e.key.toLowerCase()==="r")reset()});
+  reset();resize();
+})();
+</script>
+</body>
+</html>
+```
